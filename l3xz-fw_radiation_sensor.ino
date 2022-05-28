@@ -31,7 +31,7 @@
 #define LED1_PIN 2
 #define LED2_PIN A7
 #define LED3_PIN A6
-#define BUMPER 6
+#define RADIATION_PIN 10
 #define ANALOG_PIN A1
 
 /**************************************************************************************
@@ -106,6 +106,8 @@ void setup()
   digitalWrite(LED2_PIN, LOW);
   pinMode(LED3_PIN, OUTPUT);
   digitalWrite(LED3_PIN, LOW);
+  pinMode(0, INPUT_PULLUP);
+  pinMode(RADIATION_PIN, INPUT_PULLUP);
 
   /* Setup I2C Eeprom */
   ee.begin();
@@ -145,7 +147,10 @@ void setup()
   uc->subscribe<Bit_1_0<ID_LED1>>(onLed1_Received);
   Serial.println("init finished");
 
+  /* set up radiation measurement */
+  attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), radiation_count, RISING);
   radiation_ticks=0;
+
   /* Feed the watchdog to keep it from biting. */
   Watchdog.reset();
 }
@@ -198,6 +203,8 @@ void loop()
     uavcan_radiation_value.data.value = radiation_ticks;
     uc->publish(uavcan_radiation_value);
     prev_radiation = now;
+    Serial.print("Radiation Value: ");
+    Serial.println(radiation_ticks);
     radiation_ticks=0;
   }
 
@@ -237,4 +244,9 @@ void onLed1_Received(CanardTransfer const & transfer, ArduinoUAVCAN & /* uavcan 
     digitalWrite(LED1_PIN, LOW);
     Serial.println("Received Bit1: false");
   }
+}
+
+void radiation_count() {
+  /* simply increase tick counter */
+  radiation_ticks++;
 }
