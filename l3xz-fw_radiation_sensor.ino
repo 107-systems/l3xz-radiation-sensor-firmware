@@ -106,7 +106,6 @@ void setup()
   digitalWrite(LED2_PIN, LOW);
   pinMode(LED3_PIN, OUTPUT);
   digitalWrite(LED3_PIN, LOW);
-  pinMode(0, INPUT_PULLUP);
   pinMode(RADIATION_PIN, INPUT_PULLUP);
 
   /* Setup I2C Eeprom */
