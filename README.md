@@ -10,15 +10,15 @@ based on the [leg controller](https://github.com/107-systems/l3xz-hw_leg-control
 
 ## uavcan settings
 
-specific seetings for the L3X-Z Hexapod can be found here: ???
+specific seetings for the L3X-Z Hexapod can be found here: https://github.com/107-systems/l3xz-hw#node-ids
 
 ### Node-ID
 
-every leg controller needs to have its own Node-ID. The Node-ID is stored in the eeprom.
+every controller needs to have its own Node-ID. The Node-ID is stored in the eeprom.
 
 ### Subject-ID
 
-all leg controllers can use the same Subject-IDs. The host can differentiate between them by their Node-IDs.
+all controllers can use the same Subject-IDs. The host can differentiate between them by their Node-IDs.
 
 | **Subject-ID** | **direction** | **name**          | **type**    |
 |:--------------:|:-------------:|:-----------------:|:-----------:|
