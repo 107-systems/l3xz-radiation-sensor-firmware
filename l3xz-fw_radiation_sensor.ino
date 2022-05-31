@@ -7,21 +7,19 @@
  * https://github.com/107-systems/l3xz-hw_leg-controller
  *
  * Used Subject-IDs
- * 1001 - pub - Real32    - input voltage
- * 1005 - sub - Bit       - LED1
  * 3000 - pub - Integer16 - radiation value
  */
 
 /**************************************************************************************
  * INCLUDE
  **************************************************************************************/
+
 #include <SPI.h>
 #include <Wire.h>
 
 
 #include <ArduinoUAVCAN.h>
 #include <ArduinoMCP2515.h>
-#include <Adafruit_SleepyDog.h>
 
 /**************************************************************************************
  * DEFINES
@@ -87,10 +85,8 @@ volatile int radiation_ticks = 0;
 
 void setup()
 {
-  Watchdog.enable(1000);
-
   Serial.begin(115200);
-  while(!Serial) { Watchdog.reset(); } /* only for debug */
+  //while(!Serial) { Watchdog.reset(); } /* only for debug */
 
   /* Setup LED pins and initialize */
   pinMode(LED1_PIN, OUTPUT);
@@ -123,15 +119,9 @@ void setup()
   hb = Heartbeat_1_0<>::Mode::INITIALIZATION;
   hb.data.vendor_specific_status_code = 0;
 
-  /* Subscribe to the reception of Bit message. */
-  Serial.println("init finished");
-
   /* set up radiation measurement */
   attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), radiation_count, RISING);
   radiation_ticks = 0;
-
-  /* Feed the watchdog to keep it from biting. */
-  Watchdog.reset();
 }
 
 void loop()
@@ -169,30 +159,29 @@ void loop()
   {
      hb.data.uptime = millis() / 1000;
      hb = Heartbeat_1_0<>::Mode::OPERATIONAL;
-     Serial.println(hb.data.uptime);
      uc->publish(hb);
      prev_heartbeat = now;
    }
 
-/*send radiation every 10 seconds. all ticks counted in this time*/
   if((now - prev_radiation) > 10000)
   {
-    Integer16_1_0<ID_RADIATION_VALUE> uavcan_radiation_value;
     noInterrupts();
+    Integer16_1_0<ID_RADIATION_VALUE> uavcan_radiation_value;
     uavcan_radiation_value.data.value = radiation_ticks;
+    radiation_ticks = 0;
     interrupts();
     uc->publish(uavcan_radiation_value);
+
+    if (Serial) {
+      Serial.print("Radiation Value: ");
+      Serial.println(uavcan_radiation_value.data.value);
+    }
+
     prev_radiation = now;
-    Serial.print("Radiation Value: ");
-    Serial.println(radiation_ticks);
-    radiation_ticks=0;
   }
 
   /* Transmit all enqeued CAN frames */
   while(uc->transmitCanFrame()) { }
-
-  /* Feed the watchdog to keep it from biting. */
-  Watchdog.reset();
 }
 
 /**************************************************************************************
@@ -201,7 +190,6 @@ void loop()
 
 void radiation_count()
 {
-  /* simply increase tick counter */
   radiation_ticks++;
-  Serial.println(radiation_ticks);
+  if (Serial) Serial.println(radiation_ticks);
 }
