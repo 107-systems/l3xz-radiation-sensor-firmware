@@ -15,11 +15,9 @@
  **************************************************************************************/
 
 #include <SPI.h>
-#include <Wire.h>
 
-
-#include <ArduinoUAVCAN.h>
-#include <ArduinoMCP2515.h>
+#include <107-Arduino-Cyphal.h>
+#include <107-Arduino-MCP2515.h>
 
 /**************************************************************************************
  * DEFINES
@@ -45,6 +43,7 @@ static int          const MKRCAN_MCP2515_CS_PIN  = 3;
 static int          const MKRCAN_MCP2515_INT_PIN = 9;
 
 static CanardPortID const ID_RADIATION_VALUE = 3000U;
+static CanardNodeID const RADIATION_SENSOR_NODE_ID = 98;
 
 static SPISettings  const MCP2515x_SPI_SETTING{1000000, MSBFIRST, SPI_MODE0};
 
@@ -52,12 +51,12 @@ static SPISettings  const MCP2515x_SPI_SETTING{1000000, MSBFIRST, SPI_MODE0};
  * FUNCTION DECLARATION
  **************************************************************************************/
 
+void radiation_count();
+void onReceiveBufferFull(CanardFrame const &);
+
 /**************************************************************************************
  * GLOBAL VARIABLES
  **************************************************************************************/
-
-static ArduinoUAVCAN * uc = nullptr;
-
 
 ArduinoMCP2515 mcp2515([]()
                        {
@@ -73,8 +72,10 @@ ArduinoMCP2515 mcp2515([]()
                        },
                        [](uint8_t const d) { return SPI.transfer(d); },
                        micros,
-                       [](CanardFrame const & f) { uc->onCanFrameReceived(f); },
+                       onReceiveBufferFull,
                        nullptr);
+
+Node node_hdl([](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
 
 Heartbeat_1_0<> hb;
 volatile int radiation_ticks = 0;
@@ -97,7 +98,8 @@ void setup()
   digitalWrite(LED3_PIN, LOW);
   pinMode(RADIATION_PIN, INPUT_PULLUP);
 
-  uc = new ArduinoUAVCAN(98, [](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
+  /* Configure OpenCyphal node. */
+  node_hdl.setNodeId(RADIATION_SENSOR_NODE_ID);
 
   /* Setup SPI access */
   SPI.begin();
@@ -159,7 +161,7 @@ void loop()
   {
      hb.data.uptime = millis() / 1000;
      hb = Heartbeat_1_0<>::Mode::OPERATIONAL;
-     uc->publish(hb);
+     node_hdl.publish(hb);
      prev_heartbeat = now;
    }
 
@@ -170,7 +172,7 @@ void loop()
     uavcan_radiation_value.data.value = radiation_ticks;
     radiation_ticks = 0;
     interrupts();
-    uc->publish(uavcan_radiation_value);
+    node_hdl.publish(uavcan_radiation_value);
 
     if (Serial) {
       Serial.print("Radiation Value: ");
@@ -181,12 +183,17 @@ void loop()
   }
 
   /* Transmit all enqeued CAN frames */
-  while(uc->transmitCanFrame()) { }
+  while(node_hdl.transmitCanFrame()) { }
 }
 
 /**************************************************************************************
  * FUNCTION DEFINITION
  **************************************************************************************/
+
+void onReceiveBufferFull(CanardFrame const & frame)
+{
+  node_hdl.onCanFrameReceived(frame, micros());
+}
 
 void radiation_count()
 {
