@@ -1,12 +1,15 @@
 <a href="https://107-systems.org/"><img align="right" src="https://raw.githubusercontent.com/107-systems/.github/main/logo/107-systems.png" width="15%"></a>
 :floppy_disk: Firmware for the L3X-Z radiation sensor
 =====================================================
-
 [![General Formatting Checks](https://github.com/107-systems/l3xz-fw_radiation_sensor/workflows/General%20Formatting%20Checks/badge.svg)](https://github.com/107-systems/l3xz-fw_radiation_sensor/actions?workflow=General+Formatting+Checks)
 [![Spell Check](https://github.com/107-systems/l3xz-fw_radiation_sensor/workflows/Spell%20Check/badge.svg)](https://github.com/107-systems/l3xz-fw_radiation_sensor/actions?workflow=Spell+Check)
 [![Compile Examples](https://github.com/107-systems/l3xz-fw_radiation_sensor/workflows/Compile/badge.svg)](https://github.com/107-systems/l3xz-fw_radiation_sensor/actions?workflow=Compile)
 
 Firmware for the radiation sensor board providing radiation data via OpenCyphal.
+
+<p align="center">
+  <a href="https://github.com/107-systems/l3xz"><img src="https://raw.githubusercontent.com/107-systems/.github/main/logo/l3xz-logo-memento-mori-github.png" width="30%"></a>
+</p>
 
 ## How-to-build/upload
 ```bash
