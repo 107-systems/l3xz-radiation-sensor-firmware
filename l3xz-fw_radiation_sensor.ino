@@ -77,6 +77,24 @@ ArduinoMCP2515 mcp2515([]()
 
 Node node_hdl([](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
 
+/* NODE INFO **************************************************************************/
+
+static NodeInfo node_info
+(
+  /* uavcan.node.Version.1.0 protocol_version */
+  1, 0,
+  /* uavcan.node.Version.1.0 hardware_version */
+  1, 0,
+  /* uavcan.node.Version.1.0 software_version */
+  0, 1,
+  /* saturated uint64 software_vcs_revision_id */
+  NULL,
+  /* saturated uint8[16] unique_id */
+  OpenCyphalUniqueId(),
+  /* saturated uint8[<=50] name */
+  "107-systems.l3xz-fw_radiation_sensor"
+);
+
 Heartbeat_1_0<> hb;
 volatile int radiation_ticks = 0;
 
@@ -100,6 +118,7 @@ void setup()
 
   /* Configure OpenCyphal node. */
   node_hdl.setNodeId(RADIATION_SENSOR_NODE_ID);
+  node_info.subscribe(node_hdl);
 
   /* Setup SPI access */
   SPI.begin();
@@ -124,6 +143,7 @@ void setup()
   /* set up radiation measurement */
   attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), radiation_count, RISING);
   radiation_ticks = 0;
+
 }
 
 void loop()
