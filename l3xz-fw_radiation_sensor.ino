@@ -128,6 +128,10 @@ void setup()
 
 void loop()
 {
+  /* Process all pending OpenCyphal actions.
+   */
+  node_hdl.spinSome();
+
   /* toggle LEDS */
   static bool flag_led=0;
   if((millis()%200)==0)
@@ -181,9 +185,6 @@ void loop()
 
     prev_radiation = now;
   }
-
-  /* Transmit all enqeued CAN frames */
-  while(node_hdl.transmitCanFrame()) { }
 }
 
 /**************************************************************************************
