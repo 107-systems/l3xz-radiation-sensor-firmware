@@ -43,7 +43,7 @@ static int          const MKRCAN_MCP2515_CS_PIN  = 3;
 static int          const MKRCAN_MCP2515_INT_PIN = 9;
 
 static CanardPortID const ID_RADIATION_VALUE = 3000U;
-static CanardNodeID const RADIATION_SENSOR_NODE_ID = 98;
+static CanardNodeID const DEFAULT_RADIATION_SENSOR_NODE_ID = 98;
 
 static SPISettings  const MCP2515x_SPI_SETTING{1000000, MSBFIRST, SPI_MODE0};
 
@@ -76,6 +76,17 @@ ArduinoMCP2515 mcp2515([]()
                        nullptr);
 
 Node node_hdl([](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
+
+static uint16_t update_period_radiation_cpm_ms = 10000;
+
+/* REGISTER ***************************************************************************/
+
+static RegisterNatural8  reg_rw_uavcan_node_id                    ("uavcan.node.id",                     Register::Access::ReadWrite, Register::Persistent::No, DEFAULT_RADIATION_SENSOR_NODE_ID, [&node_hdl](uint8_t const reg_val) { node_hdl.setNodeId(reg_val); });
+static RegisterString    reg_ro_uavcan_node_description           ("uavcan.node.description",            Register::Access::ReadWrite, Register::Persistent::No, "L3X-Z Radiation Sensor");
+static RegisterNatural16 reg_ro_uavcan_pub_radiation_cpm_id       ("uavcan.pub.radiation_cpm.id",        Register::Access::ReadOnly,  Register::Persistent::No, ID_RADIATION_VALUE);
+static RegisterString    reg_ro_uavcan_pub_radiation_cpm_type     ("uavcan.pub.radiation_cpm.type",      Register::Access::ReadOnly,  Register::Persistent::No, "uavcan.primitive.scalar.Integer16.1.0");
+static RegisterNatural16 reg_rw_rad_update_period_radiation_cpm_ms("rad.update_period_ms.radiation_cpm", Register::Access::ReadWrite, Register::Persistent::No, update_period_radiation_cpm_ms, nullptr, nullptr, [](uint16_t const & val) { return std::min(val, static_cast<uint16_t>(100)); });
+static RegisterList      reg_list;
 
 /* NODE INFO **************************************************************************/
 
@@ -117,8 +128,17 @@ void setup()
   pinMode(RADIATION_PIN, INPUT_PULLUP);
 
   /* Configure OpenCyphal node. */
-  node_hdl.setNodeId(RADIATION_SENSOR_NODE_ID);
+  node_hdl.setNodeId(DEFAULT_RADIATION_SENSOR_NODE_ID);
+
   node_info.subscribe(node_hdl);
+
+  reg_list.add(reg_rw_uavcan_node_id);
+  reg_list.add(reg_ro_uavcan_node_description);
+  reg_list.add(reg_ro_uavcan_pub_radiation_cpm_id);
+  reg_list.add(reg_ro_uavcan_pub_radiation_cpm_type);
+  reg_list.add(reg_rw_rad_update_period_radiation_cpm_ms);
+  reg_list.subscribe(node_hdl);
+
 
   /* Setup SPI access */
   SPI.begin();
@@ -189,7 +209,7 @@ void loop()
      prev_heartbeat = now;
    }
 
-  if((now - prev_radiation) > 10000)
+  if((now - prev_radiation) > update_period_radiation_cpm_ms)
   {
     noInterrupts();
     Integer16_1_0<ID_RADIATION_VALUE> uavcan_radiation_value;
