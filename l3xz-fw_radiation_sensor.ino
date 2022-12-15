@@ -75,7 +75,8 @@ ArduinoMCP2515 mcp2515([]()
                        onReceiveBufferFull,
                        nullptr);
 
-Node node_hdl([](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
+CyphalHeap<Node::DEFAULT_O1HEAP_SIZE> node_heap;
+Node node_hdl(node_heap.data(), node_heap.size(), DEFAULT_RADIATION_SENSOR_NODE_ID);
 
 static uint16_t update_period_radiation_cpm_ms = 10000;
 
@@ -170,7 +171,7 @@ void loop()
 {
   /* Process all pending OpenCyphal actions.
    */
-  node_hdl.spinSome();
+  node_hdl.spinSome([](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
 
   /* toggle LEDS */
   static bool flag_led=0;
