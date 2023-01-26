@@ -18,15 +18,8 @@
 
 #include <107-Arduino-Cyphal.h>
 #include <107-Arduino-MCP2515.h>
-
-/**************************************************************************************
- * DEFINES
- **************************************************************************************/
-
-#define LED1_PIN 2
-#define LED2_PIN A7
-#define LED3_PIN A6
-#define RADIATION_PIN 10
+#include <107-Arduino-UniqueId.h>
+#include <107-Arduino-CriticalSection.h>
 
 /**************************************************************************************
  * NAMESPACE
@@ -39,8 +32,9 @@ using namespace uavcan::primitive::scalar;
  * CONSTANTS
  **************************************************************************************/
 
-static int          const MKRCAN_MCP2515_CS_PIN  = 3;
-static int          const MKRCAN_MCP2515_INT_PIN = 9;
+static int const MKRCAN_MCP2515_CS_PIN  = 3;
+static int const MKRCAN_MCP2515_INT_PIN = 9;
+static int const RADIATION_PIN          = 10;
 
 static CanardPortID const ID_RADIATION_VALUE = 3000U;
 static CanardNodeID const DEFAULT_RADIATION_SENSOR_NODE_ID = 98;
@@ -75,8 +69,11 @@ ArduinoMCP2515 mcp2515([]()
                        onReceiveBufferFull,
                        nullptr);
 
-CyphalHeap<Node::DEFAULT_O1HEAP_SIZE> node_heap;
-Node node_hdl(node_heap.data(), node_heap.size(), DEFAULT_RADIATION_SENSOR_NODE_ID);
+Node::Heap<Node::DEFAULT_O1HEAP_SIZE> node_heap;
+Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const & frame) { return mcp2515.transmit(frame); }, DEFAULT_RADIATION_SENSOR_NODE_ID);
+
+Publisher<Heartbeat_1_0<>> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0<>>
+  (Heartbeat_1_0<>::PORT_ID, 1*1000*1000UL /* = 1 sec in usecs. */);
 
 static uint16_t update_period_radiation_cpm_ms = 10000;
 
@@ -87,7 +84,7 @@ static RegisterString    reg_ro_uavcan_node_description           ("uavcan.node.
 static RegisterNatural16 reg_ro_uavcan_pub_radiation_cpm_id       ("uavcan.pub.radiation_cpm.id",        Register::Access::ReadOnly,  Register::Persistent::No, ID_RADIATION_VALUE);
 static RegisterString    reg_ro_uavcan_pub_radiation_cpm_type     ("uavcan.pub.radiation_cpm.type",      Register::Access::ReadOnly,  Register::Persistent::No, "uavcan.primitive.scalar.Integer16.1.0");
 static RegisterNatural16 reg_rw_rad_update_period_radiation_cpm_ms("rad.update_period_ms.radiation_cpm", Register::Access::ReadWrite, Register::Persistent::No, update_period_radiation_cpm_ms, nullptr, nullptr, [](uint16_t const & val) { return std::min(val, static_cast<uint16_t>(100)); });
-static RegisterList      reg_list;
+static RegisterList      reg_list(node_hdl);
 
 /* NODE INFO **************************************************************************/
 
@@ -104,7 +101,7 @@ static NodeInfo node_info
   /* saturated uint8[16] unique_id */
   OpenCyphalUniqueId(),
   /* saturated uint8[<=50] name */
-  "107-systems.l3xz-fw_radiation_sensor"
+  "107-systems.l3xz-radiation-sensor"
 );
 
 Heartbeat_1_0<> hb;
@@ -120,12 +117,6 @@ void setup()
   //while(!Serial) { Watchdog.reset(); } /* only for debug */
 
   /* Setup LED pins and initialize */
-  pinMode(LED1_PIN, OUTPUT);
-  digitalWrite(LED1_PIN, LOW);
-  pinMode(LED2_PIN, OUTPUT);
-  digitalWrite(LED2_PIN, LOW);
-  pinMode(LED3_PIN, OUTPUT);
-  digitalWrite(LED3_PIN, LOW);
   pinMode(RADIATION_PIN, INPUT_PULLUP);
 
   /* Configure OpenCyphal node. */
@@ -138,8 +129,6 @@ void setup()
   reg_list.add(reg_ro_uavcan_pub_radiation_cpm_id);
   reg_list.add(reg_ro_uavcan_pub_radiation_cpm_type);
   reg_list.add(reg_rw_rad_update_period_radiation_cpm_ms);
-  reg_list.subscribe(node_hdl);
-
 
   /* Setup SPI access */
   SPI.begin();
@@ -156,43 +145,24 @@ void setup()
   mcp2515.setNormalMode();
 
   /* Configure initial heartbeat */
-  hb.data.uptime = 0;
-  hb = Heartbeat_1_0<>::Health::NOMINAL;
-  hb = Heartbeat_1_0<>::Mode::INITIALIZATION;
-  hb.data.vendor_specific_status_code = 0;
+  hb_msg.data.uptime = 0;
+  hb_msg.data.health.value = uavcan_node_Health_1_0_NOMINAL;
+  hb_msg.data.mode.value = uavcan_node_Mode_1_0_INITIALIZATION;
+  hb_msg.data.vendor_specific_status_code = 0;
 
   /* set up radiation measurement */
   attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), radiation_count, RISING);
   radiation_ticks = 0;
-
 }
 
 void loop()
 {
   /* Process all pending OpenCyphal actions.
    */
-  node_hdl.spinSome([](CanardFrame const & frame) -> bool { return mcp2515.transmit(frame); });
-
-  /* toggle LEDS */
-  static bool flag_led=0;
-  if((millis()%200)==0)
   {
-    if(flag_led==0) // execute only once
-    {
-      if(digitalRead(LED2_PIN)==LOW)
-      {
-        digitalWrite(LED2_PIN, HIGH);
-        digitalWrite(LED3_PIN, LOW);
-      }
-      else
-      {
-        digitalWrite(LED2_PIN, LOW);
-        digitalWrite(LED3_PIN, HIGH);
-      }
-    }
-    flag_led=1;
+    CriticalSection crit_sec;
+    node_hdl.spinSome();
   }
-  else flag_led=0;
 
   /* Publish all the gathered data, although at various
    * different intervals.
@@ -204,10 +174,11 @@ void loop()
 
   if((now - prev_heartbeat) > 1000)
   {
-     hb.data.uptime = millis() / 1000;
-     hb = Heartbeat_1_0<>::Mode::OPERATIONAL;
-     node_hdl.publish(hb);
-     prev_heartbeat = now;
+    prev_heartbeat = now;
+
+    hb_msg.data.uptime = millis() / 1000;
+    hb_msg.data.mode.value = uavcan_node_Mode_1_0_OPERATIONAL;
+    heartbeat_pub->publish(hb_msg);
    }
 
   if((now - prev_radiation) > update_period_radiation_cpm_ms)
