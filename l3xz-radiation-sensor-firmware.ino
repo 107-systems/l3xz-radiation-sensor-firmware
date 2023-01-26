@@ -110,7 +110,7 @@ static NodeInfo node_info
 );
 
 Heartbeat_1_0<> hb_msg;
-static volatile int radiation_ticks = 0;
+static Integer16_1_0<ID_RADIATION_VALUE> radiation_ticks;
 
 /**************************************************************************************
  * SETUP/LOOP
@@ -151,12 +151,9 @@ void setup()
   hb_msg.data.vendor_specific_status_code = 0;
 
   /* set up radiation measurement */
+  radiation_ticks.data.value = 0;
   attachInterrupt(digitalPinToInterrupt(RADIATION_PIN),
-                  []()
-                  {
-                    radiation_ticks++;
-                    if (Serial) Serial.println(radiation_ticks);
-                  },
+                  []() { radiation_ticks.data.value++; },
                   RISING);
 }
 
@@ -188,19 +185,18 @@ void loop()
 
   if((now - prev_radiation) > 10000)
   {
-    noInterrupts();
-    Integer16_1_0<ID_RADIATION_VALUE> uavcan_radiation_value;
-    uavcan_radiation_value.data.value = radiation_ticks;
-    radiation_ticks = 0;
-    interrupts();
-    radition_tick_pub->publish(uavcan_radiation_value);
+    prev_radiation = now;
+
+    {
+      CriticalSection crit_sec;
+      radition_tick_pub->publish(radiation_ticks);
+      radiation_ticks.data.value = 0;
+    }
 
     if (Serial) {
       Serial.print("Radiation Value: ");
-      Serial.println(uavcan_radiation_value.data.value);
+      Serial.println(radiation_ticks.data.value);
     }
-
-    prev_radiation = now;
   }
 }
 
