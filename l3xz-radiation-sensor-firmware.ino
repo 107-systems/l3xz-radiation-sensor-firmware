@@ -41,7 +41,7 @@ static int const MKRCAN_MCP2515_INT_PIN = 9;
 static int const RADIATION_PIN          = 10;
 
 static CanardPortID const ID_RADIATION_VALUE = 3000U;
-static CanardNodeID const DEFAULT_RADIATION_SENSOR_NODE_ID = 98;
+static CanardNodeID const DEFAULT_RADIATION_SENSOR_NODE_ID = 21;
 
 static SPISettings  const MCP2515x_SPI_SETTING{1000000, MSBFIRST, SPI_MODE0};
 
@@ -79,7 +79,8 @@ Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const 
 Publisher<Heartbeat_1_0<>> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0<>>
   (Heartbeat_1_0<>::PORT_ID, 1*1000*1000UL /* = 1 sec in usecs. */);
 
-static uint16_t update_period_radiation_cpm_ms = 10000;
+Publisher<Integer16_1_0<ID_RADIATION_VALUE>> radition_tick_pub = node_hdl.create_publisher<Integer16_1_0<ID_RADIATION_VALUE>>
+  (ID_RADIATION_VALUE, 1*1000*1000UL /* = 1 sec in usecs. */);
 
 /* REGISTER ***************************************************************************/
 
@@ -87,13 +88,13 @@ static RegisterNatural8  reg_rw_uavcan_node_id                    ("uavcan.node.
 static RegisterString    reg_ro_uavcan_node_description           ("uavcan.node.description",            Register::Access::ReadWrite, Register::Persistent::No, "L3X-Z Radiation Sensor");
 static RegisterNatural16 reg_ro_uavcan_pub_radiation_cpm_id       ("uavcan.pub.radiation_cpm.id",        Register::Access::ReadOnly,  Register::Persistent::No, ID_RADIATION_VALUE);
 static RegisterString    reg_ro_uavcan_pub_radiation_cpm_type     ("uavcan.pub.radiation_cpm.type",      Register::Access::ReadOnly,  Register::Persistent::No, "uavcan.primitive.scalar.Integer16.1.0");
-static RegisterNatural16 reg_rw_rad_update_period_radiation_cpm_ms("rad.update_period_ms.radiation_cpm", Register::Access::ReadWrite, Register::Persistent::No, update_period_radiation_cpm_ms, nullptr, nullptr, [](uint16_t const & val) { return std::min(val, static_cast<uint16_t>(100)); });
 static RegisterList      reg_list(node_hdl);
 
 /* NODE INFO **************************************************************************/
 
 static NodeInfo node_info
 (
+  node_hdl,
   /* uavcan.node.Version.1.0 protocol_version */
   1, 0,
   /* uavcan.node.Version.1.0 hardware_version */
@@ -128,7 +129,6 @@ void setup()
   reg_list.add(reg_ro_uavcan_node_description);
   reg_list.add(reg_ro_uavcan_pub_radiation_cpm_id);
   reg_list.add(reg_ro_uavcan_pub_radiation_cpm_type);
-  reg_list.add(reg_rw_rad_update_period_radiation_cpm_ms);
 
   /* Setup SPI access */
   SPI.begin();
@@ -151,7 +151,13 @@ void setup()
   hb_msg.data.vendor_specific_status_code = 0;
 
   /* set up radiation measurement */
-  attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), radiation_count, RISING);
+  attachInterrupt(digitalPinToInterrupt(RADIATION_PIN),
+                  []()
+                  {
+                    radiation_ticks++;
+                    if (Serial) Serial.println(radiation_ticks);
+                  },
+                  RISING);
 }
 
 void loop()
@@ -180,14 +186,14 @@ void loop()
     heartbeat_pub->publish(hb_msg);
    }
 
-  if((now - prev_radiation) > update_period_radiation_cpm_ms)
+  if((now - prev_radiation) > 10000)
   {
     noInterrupts();
     Integer16_1_0<ID_RADIATION_VALUE> uavcan_radiation_value;
     uavcan_radiation_value.data.value = radiation_ticks;
     radiation_ticks = 0;
     interrupts();
-    node_hdl.publish(uavcan_radiation_value);
+    radition_tick_pub->publish(uavcan_radiation_value);
 
     if (Serial) {
       Serial.print("Radiation Value: ");
@@ -204,11 +210,5 @@ void loop()
 
 void onReceiveBufferFull(CanardFrame const & frame)
 {
-  node_hdl.onCanFrameReceived(frame, micros());
-}
-
-void radiation_count()
-{
-  radiation_ticks++;
-  if (Serial) Serial.println(radiation_ticks);
+  node_hdl.onCanFrameReceived(frame);
 }
