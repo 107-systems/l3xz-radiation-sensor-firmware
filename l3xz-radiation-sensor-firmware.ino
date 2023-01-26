@@ -14,6 +14,9 @@
  * INCLUDE
  **************************************************************************************/
 
+#include <pico/stdlib.h>
+#include <hardware/watchdog.h>
+
 #include <SPI.h>
 
 #include <107-Arduino-Cyphal.h>
@@ -26,6 +29,7 @@
  **************************************************************************************/
 
 using namespace uavcan::node;
+using namespace uavcan::_register;
 using namespace uavcan::primitive::scalar;
 
 /**************************************************************************************
@@ -104,8 +108,8 @@ static NodeInfo node_info
   "107-systems.l3xz-radiation-sensor"
 );
 
-Heartbeat_1_0<> hb;
-volatile int radiation_ticks = 0;
+Heartbeat_1_0<> hb_msg;
+static volatile int radiation_ticks = 0;
 
 /**************************************************************************************
  * SETUP/LOOP
@@ -120,10 +124,6 @@ void setup()
   pinMode(RADIATION_PIN, INPUT_PULLUP);
 
   /* Configure OpenCyphal node. */
-  node_hdl.setNodeId(DEFAULT_RADIATION_SENSOR_NODE_ID);
-
-  node_info.subscribe(node_hdl);
-
   reg_list.add(reg_rw_uavcan_node_id);
   reg_list.add(reg_ro_uavcan_node_description);
   reg_list.add(reg_ro_uavcan_pub_radiation_cpm_id);
@@ -152,7 +152,6 @@ void setup()
 
   /* set up radiation measurement */
   attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), radiation_count, RISING);
-  radiation_ticks = 0;
 }
 
 void loop()
