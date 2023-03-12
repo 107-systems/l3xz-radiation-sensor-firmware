@@ -76,19 +76,26 @@ ArduinoMCP2515 mcp2515([]()
 Node::Heap<Node::DEFAULT_O1HEAP_SIZE> node_heap;
 Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const & frame) { return mcp2515.transmit(frame); }, DEFAULT_RADIATION_SENSOR_NODE_ID);
 
-Publisher<Heartbeat_1_0<>> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0<>>
-  (Heartbeat_1_0<>::PORT_ID, 1*1000*1000UL /* = 1 sec in usecs. */);
+Publisher<Heartbeat_1_0> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0>
+  (Heartbeat_1_0::_traits_::FixedPortId, 1*1000*1000UL /* = 1 sec in usecs. */);
 
-Publisher<Integer16_1_0<ID_RADIATION_VALUE>> radition_tick_pub = node_hdl.create_publisher<Integer16_1_0<ID_RADIATION_VALUE>>
+Publisher<Integer16_1_0> radiation_tick_pub = node_hdl.create_publisher<Integer16_1_0>
   (ID_RADIATION_VALUE, 1*1000*1000UL /* = 1 sec in usecs. */);
 
 /* REGISTER ***************************************************************************/
 
-static RegisterNatural8  reg_rw_uavcan_node_id                    ("uavcan.node.id",                     Register::Access::ReadWrite, Register::Persistent::No, DEFAULT_RADIATION_SENSOR_NODE_ID, [&node_hdl](uint8_t const reg_val) { node_hdl.setNodeId(reg_val); });
-static RegisterString    reg_ro_uavcan_node_description           ("uavcan.node.description",            Register::Access::ReadWrite, Register::Persistent::No, "L3X-Z Radiation Sensor");
-static RegisterNatural16 reg_ro_uavcan_pub_radiation_cpm_id       ("uavcan.pub.radiation_cpm.id",        Register::Access::ReadOnly,  Register::Persistent::No, ID_RADIATION_VALUE);
-static RegisterString    reg_ro_uavcan_pub_radiation_cpm_type     ("uavcan.pub.radiation_cpm.type",      Register::Access::ReadOnly,  Register::Persistent::No, "uavcan.primitive.scalar.Integer16.1.0");
-static RegisterList      reg_list(node_hdl);
+static CanardNodeID node_id = DEFAULT_RADIATION_SENSOR_NODE_ID;
+
+#if __GNUC__ >= 11
+
+Registry reg(node_hdl, micros);
+
+const auto reg_rw_uavcan_node_id = reg.expose("cyphal.node.id", node_id);
+const auto reg_ro_uavcan_node_description = reg.route("cyphal.node.description", {true}, []() { return "L3X-Z Radiation Sensor"});
+const auto reg_ro_uavcan_pub_radiation_cpm_id = reg.route("cyphal.pub.radiation_cpm.id", {true}, []() { return ID_RADIATION_VALUE; });
+const auto reg_ro_uavcan_pub_radiation_cpm_type = reg.route("cyphal.pub.radiation_cpm.type", {true}, []() { return "uavcan.primitive.scalar.Integer16.1.0"} );
+
+#endif /* __GNUC__ >= 11 */
 
 /* NODE INFO **************************************************************************/
 
@@ -109,8 +116,7 @@ static NodeInfo node_info
   "107-systems.l3xz-radiation-sensor"
 );
 
-Heartbeat_1_0<> hb_msg;
-static Integer16_1_0<ID_RADIATION_VALUE> radiation_ticks;
+static volatile int16_t rad_tick_cnt = 0;
 
 /**************************************************************************************
  * SETUP/LOOP
@@ -123,12 +129,6 @@ void setup()
 
   /* Setup LED pins and initialize */
   pinMode(RADIATION_PIN, INPUT_PULLUP);
-
-  /* Configure OpenCyphal node. */
-  reg_list.add(reg_rw_uavcan_node_id);
-  reg_list.add(reg_ro_uavcan_node_description);
-  reg_list.add(reg_ro_uavcan_pub_radiation_cpm_id);
-  reg_list.add(reg_ro_uavcan_pub_radiation_cpm_type);
 
   /* Setup SPI access */
   SPI.begin();
@@ -144,16 +144,9 @@ void setup()
   mcp2515.setBitRate(CanBitRate::BR_250kBPS_16MHZ);
   mcp2515.setNormalMode();
 
-  /* Configure initial heartbeat */
-  hb_msg.data.uptime = 0;
-  hb_msg.data.health.value = uavcan_node_Health_1_0_NOMINAL;
-  hb_msg.data.mode.value = uavcan_node_Mode_1_0_INITIALIZATION;
-  hb_msg.data.vendor_specific_status_code = 0;
-
   /* set up radiation measurement */
-  radiation_ticks.data.value = 0;
   attachInterrupt(digitalPinToInterrupt(RADIATION_PIN),
-                  []() { radiation_ticks.data.value++; },
+                  []() { rad_tick_cnt++; },
                   RISING);
 }
 
@@ -178,24 +171,33 @@ void loop()
   {
     prev_heartbeat = now;
 
-    hb_msg.data.uptime = millis() / 1000;
-    hb_msg.data.mode.value = uavcan_node_Mode_1_0_OPERATIONAL;
-    heartbeat_pub->publish(hb_msg);
+    Heartbeat_1_0 msg;
+
+    msg.uptime = millis() / 1000;
+    msg.health.value = uavcan::node::Health_1_0::NOMINAL;
+    msg.mode.value = uavcan::node::Mode_1_0::OPERATIONAL;
+    msg.vendor_specific_status_code = 0;
+
+    heartbeat_pub->publish(msg);
    }
 
   if((now - prev_radiation) > 10000)
   {
     prev_radiation = now;
 
+    Integer16_1_0 msg;
+
     {
       CriticalSection crit_sec;
-      radition_tick_pub->publish(radiation_ticks);
-      radiation_ticks.data.value = 0;
+      msg.value = rad_tick_cnt;
+      rad_tick_cnt = 0;
     }
+
+    radiation_tick_pub->publish(msg);
 
     if (Serial) {
       Serial.print("Radiation Value: ");
-      Serial.println(radiation_ticks.data.value);
+      Serial.println(msg.value);
     }
   }
 }
