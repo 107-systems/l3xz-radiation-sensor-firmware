@@ -58,7 +58,6 @@ void onReceiveBufferFull(CanardFrame const &);
 
 ArduinoMCP2515 mcp2515([]()
                        {
-                         noInterrupts();
                          SPI.beginTransaction(MCP2515x_SPI_SETTING);
                          digitalWrite(MKRCAN_MCP2515_CS_PIN, LOW);
                        },
@@ -66,7 +65,6 @@ ArduinoMCP2515 mcp2515([]()
                        {
                          digitalWrite(MKRCAN_MCP2515_CS_PIN, HIGH);
                          SPI.endTransaction();
-                         interrupts();
                        },
                        [](uint8_t const d) { return SPI.transfer(d); },
                        micros,
@@ -88,37 +86,14 @@ static CanardNodeID node_id = DEFAULT_RADIATION_SENSOR_NODE_ID;
 
 #if __GNUC__ >= 11
 
-Registry reg(node_hdl, micros);
+Registry node_registry(node_hdl, micros);
 
-const auto reg_rw_uavcan_node_id = reg.expose("cyphal.node.id", node_id);
-const auto reg_ro_uavcan_node_description = reg.route("cyphal.node.description", {true}, []() { return "L3X-Z Radiation Sensor"});
-const auto reg_ro_uavcan_pub_radiation_cpm_id = reg.route("cyphal.pub.radiation_cpm.id", {true}, []() { return ID_RADIATION_VALUE; });
-const auto reg_ro_uavcan_pub_radiation_cpm_type = reg.route("cyphal.pub.radiation_cpm.type", {true}, []() { return "uavcan.primitive.scalar.Integer16.1.0"} );
+const auto reg_rw_uavcan_node_id                = node_registry.expose("cyphal.node.id", {}, node_id);
+const auto reg_ro_uavcan_node_description       = node_registry.route ("cyphal.node.description", {true}, []() { return "L3X-Z Radiation Sensor"; });
+const auto reg_ro_uavcan_pub_radiation_cpm_id   = node_registry.route ("cyphal.pub.radiation_cpm.id", {true}, []() { return ID_RADIATION_VALUE; });
+const auto reg_ro_uavcan_pub_radiation_cpm_type = node_registry.route ("cyphal.pub.radiation_cpm.type", {true}, []() { return "uavcan.primitive.scalar.Integer16.1.0"; } );
 
 #endif /* __GNUC__ >= 11 */
-
-/* NODE INFO **************************************************************************/
-
-static NodeInfo node_info
-(
-  node_hdl,
-  /* uavcan.node.Version.1.0 protocol_version */
-  1, 0,
-  /* uavcan.node.Version.1.0 hardware_version */
-  1, 0,
-  /* uavcan.node.Version.1.0 software_version */
-  0, 1,
-  /* saturated uint64 software_vcs_revision_id */
-#ifdef CYPHAL_NODE_INFO_GIT_VERSION
-  CYPHAL_NODE_INFO_GIT_VERSION,
-#else
-  0,
-#endif
-  /* saturated uint8[16] unique_id */
-  OpenCyphalUniqueId(),
-  /* saturated uint8[<=50] name */
-  "107-systems.l3xz-radiation-sensor"
-);
 
 static volatile int16_t rad_tick_cnt = 0;
 
@@ -130,6 +105,28 @@ void setup()
 {
   Serial.begin(115200);
   //while(!Serial) { Watchdog.reset(); } /* only for debug */
+
+  /* NODE INFO **************************************************************************/
+
+  static const auto node_info = node_hdl.create_node_info
+  (
+    /* uavcan.node.Version.1.0 protocol_version */
+    1, 0,
+    /* uavcan.node.Version.1.0 hardware_version */
+    1, 0,
+    /* uavcan.node.Version.1.0 software_version */
+    0, 1,
+    /* saturated uint64 software_vcs_revision_id */
+#ifdef CYPHAL_NODE_INFO_GIT_VERSION
+    CYPHAL_NODE_INFO_GIT_VERSION,
+#else
+    0,
+#endif
+    /* saturated uint8[16] unique_id */
+    OpenCyphalUniqueId(),
+    /* saturated uint8[<=50] name */
+    "107-systems.l3xz-radiation-sensor"
+  );
 
   /* Setup LED pins and initialize */
   pinMode(RADIATION_PIN, INPUT_PULLUP);
