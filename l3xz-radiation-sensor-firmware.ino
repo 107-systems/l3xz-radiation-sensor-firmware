@@ -86,12 +86,12 @@ static CanardNodeID node_id = DEFAULT_RADIATION_SENSOR_NODE_ID;
 
 #if __GNUC__ >= 11
 
-Registry node_registry(node_hdl, micros);
+const auto node_registry = node_hdl.create_registry();
 
-const auto reg_rw_uavcan_node_id                = node_registry.expose("cyphal.node.id", {}, node_id);
-const auto reg_ro_uavcan_node_description       = node_registry.route ("cyphal.node.description", {true}, []() { return "L3X-Z Radiation Sensor"; });
-const auto reg_ro_uavcan_pub_radiation_cpm_id   = node_registry.route ("cyphal.pub.radiation_cpm.id", {true}, []() { return ID_RADIATION_VALUE; });
-const auto reg_ro_uavcan_pub_radiation_cpm_type = node_registry.route ("cyphal.pub.radiation_cpm.type", {true}, []() { return "uavcan.primitive.scalar.Integer16.1.0"; } );
+const auto reg_rw_uavcan_node_id                = node_registry->expose("cyphal.node.id", {}, node_id);
+const auto reg_ro_uavcan_node_description       = node_registry->route ("cyphal.node.description", {true}, []() { return "L3X-Z Radiation Sensor"; });
+const auto reg_ro_uavcan_pub_radiation_cpm_id   = node_registry->route ("cyphal.pub.radiation_cpm.id", {true}, []() { return ID_RADIATION_VALUE; });
+const auto reg_ro_uavcan_pub_radiation_cpm_type = node_registry->route ("cyphal.pub.radiation_cpm.type", {true}, []() { return "uavcan.primitive.scalar.Integer16.1.0"; } );
 
 #endif /* __GNUC__ >= 11 */
 
@@ -107,7 +107,6 @@ void setup()
   //while(!Serial) { Watchdog.reset(); } /* only for debug */
 
   /* NODE INFO **************************************************************************/
-
   static const auto node_info = node_hdl.create_node_info
   (
     /* uavcan.node.Version.1.0 protocol_version */
