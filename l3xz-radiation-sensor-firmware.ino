@@ -372,7 +372,7 @@ void loop()
     display.println(display_count);
     display.setCursor(80,16);             // Start at top-left corner
     display.println(rad_tick_cnt);
-  
+
     display.display();
   }
 
