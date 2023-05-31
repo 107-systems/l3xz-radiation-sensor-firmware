@@ -26,6 +26,14 @@
 //#define DBG_ENABLE_VERBOSE
 #include <107-Arduino-Debug.hpp>
 
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+
 /**************************************************************************************
  * NAMESPACE
  **************************************************************************************/
@@ -48,6 +56,7 @@ static SPISettings const MCP2515x_SPI_SETTING{10*1000*1000UL, MSBFIRST, SPI_MODE
 
 static uint16_t const UPDATE_PERIOD_HEARTBEAT_ms = 1000;
 static uint16_t const UPDATE_PERIOD_RADIATION_ms = 1000;
+static uint16_t const UPDATE_PERIOD_DISPLAY_ms = 1000;
 
 static uint32_t const WATCHDOG_DELAY_ms = 1000;
 
@@ -81,6 +90,8 @@ Publisher<Heartbeat_1_0> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0
 Publisher<uavcan::primitive::scalar::Natural16_1_0> radiation_pub;
 
 ServiceServer execute_command_srv = node_hdl.create_service_server<ExecuteCommand::Request_1_1, ExecuteCommand::Response_1_1>(2*1000*1000UL, onExecuteCommand_1_1_Request_Received);
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 /* LITTLEFS/EEPROM ********************************************************************/
 
@@ -280,6 +291,16 @@ void setup()
   rp2040.wdt_begin(WATCHDOG_DELAY_ms);
   rp2040.wdt_reset();
 
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  display.display();
+
   DBG_INFO("Init complete.");
 }
 
@@ -300,6 +321,7 @@ void loop()
    */
   static unsigned long prev_heartbeat = 0;
   static unsigned long prev_radiation = 0;
+  static unsigned long prev_display = 0;
 
   unsigned long const now = millis();
 
@@ -333,6 +355,25 @@ void loop()
       radiation_pub->publish(msg);
 
     DBG_INFO("Radiation Value: %d", msg.value);
+  }
+
+  if((now - prev_display) > UPDATE_PERIOD_DISPLAY_ms)
+  {
+    prev_display = now;
+
+    static int display_count=0;
+
+    display_count++;
+
+    display.clearDisplay();
+    display.setCursor(0,0);             // Start at top-left corner
+    display.setTextSize(2);             // Draw 2X-scale text
+    display.setTextColor(SSD1306_WHITE);
+    display.println(display_count);
+    display.setCursor(80,16);             // Start at top-left corner
+    display.println(rad_tick_cnt);
+  
+    display.display();
   }
 
   /* Feed the watchdog only if not an async reset is
