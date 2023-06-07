@@ -48,7 +48,7 @@ static uint8_t const EEPROM_I2C_DEV_ADDR = 0x50;
 
 static int const MCP2515_CS_PIN  = 17;
 static int const MCP2515_INT_PIN = 20;
-static int const RADIATION_PIN   = 10;
+static int const RADIATION_PIN   = 13;
 static int const LED2_PIN        = 21; /* GP21 */
 static int const LED3_PIN        = 22; /* GP22 */
 
