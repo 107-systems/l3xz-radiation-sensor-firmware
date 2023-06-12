@@ -157,6 +157,7 @@ const auto reg_ro_uavcan_pub_radiation_cpm_type = node_registry->route ("cyphal.
 #endif /* __GNUC__ >= 11 */
 
 static volatile uint16_t rad_tick_cnt = 0;
+static volatile uint16_t rad_tick_total_cnt = 0;
 
 /**************************************************************************************
  * SETUP/LOOP
@@ -244,7 +245,13 @@ void setup()
 
   /* Setup radition sensor pin and initialize. */
   pinMode(RADIATION_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(RADIATION_PIN), []() { rad_tick_cnt++; }, RISING);
+  attachInterrupt(digitalPinToInterrupt(RADIATION_PIN),
+                  []()
+                  {
+                    rad_tick_cnt++;
+                    rad_tick_total_cnt++;
+                  },
+                  RISING);
 
   /* Setup SPI access */
   SPI.begin();
@@ -370,7 +377,9 @@ void loop()
     display.setTextSize(2);             // Draw 2X-scale text
     display.setTextColor(SSD1306_WHITE);
     display.println(display_count);
-    display.setCursor(80,16);             // Start at top-left corner
+    display.setCursor(80,0);
+    display.println(rad_tick_total_cnt);
+    display.setCursor(80,16);
     display.println(rad_tick_cnt);
 
     display.display();
