@@ -82,14 +82,14 @@ ArduinoMCP2515 mcp2515([]() { digitalWrite(MCP2515_CS_PIN, LOW); },
                        [](MCP2515::EFLG const err_flag) { DBG_ERROR("MCP2515::OnError, error code = \"%s\"", MCP2515::toStr(err_flag)); },
                        [](MCP2515::EFLG const err_flag) { DBG_ERROR("MCP2515::OnWarning, warning code = \"%s\"", MCP2515::toStr(err_flag)); });
 
-Node::Heap<Node::DEFAULT_O1HEAP_SIZE> node_heap;
-Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const & frame) { return mcp2515.transmit(frame); });
+cyphal::Node::Heap<cyphal::Node::DEFAULT_O1HEAP_SIZE> node_heap;
+cyphal::Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const & frame) { return mcp2515.transmit(frame); });
 
-Publisher<Heartbeat_1_0> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0>(1*1000*1000UL /* = 1 sec in usecs. */);
+cyphal::Publisher<Heartbeat_1_0> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0>(1*1000*1000UL /* = 1 sec in usecs. */);
 
-Publisher<uavcan::primitive::scalar::Natural16_1_0> radiation_pub;
+cyphal::Publisher<uavcan::primitive::scalar::Natural16_1_0> radiation_pub;
 
-ServiceServer execute_command_srv = node_hdl.create_service_server<ExecuteCommand::Request_1_1, ExecuteCommand::Response_1_1>(2*1000*1000UL, onExecuteCommand_1_1_Request_Received);
+cyphal::ServiceServer execute_command_srv = node_hdl.create_service_server<ExecuteCommand::Request_1_1, ExecuteCommand::Response_1_1>(2*1000*1000UL, onExecuteCommand_1_1_Request_Received);
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -316,12 +316,12 @@ void loop()
   /* Deal with all pending events of the MCP2515 -
    * signaled by the INT pin being driven LOW.
    */
-  while(digitalRead(MCP2515_INT_PIN) == LOW)
-    mcp2515.onExternalEventHandler();
+  //while(digitalRead(MCP2515_INT_PIN) == LOW)
+  //  mcp2515.onExternalEventHandler();
 
   /* Process all pending Cyphal actions.
    */
-  node_hdl.spinSome();
+  //node_hdl.spinSome();
 
   /* Publish all the gathered data, although at various
    * different intervals.
@@ -361,7 +361,7 @@ void loop()
     if (radiation_pub)
       radiation_pub->publish(msg);
 
-    DBG_INFO("Radiation Value: %d", msg.value);
+    DBG_INFO("Radiation Value (Tick / Total): %d / %d", msg.value, rad_tick_total_cnt);
   }
 
   if((now - prev_display) > UPDATE_PERIOD_DISPLAY_ms)
